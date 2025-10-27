@@ -1,0 +1,71 @@
+services:
+
+  db:
+    container_name: mlflow_postgres
+    image: postgres
+    # restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_DATABASE}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT}:5432"
+    networks:
+      - tools
+
+  minio:
+    container_name: minio
+    image: minio/minio
+    # restart: unless-stopped
+    command: server /data 
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_ADDRESS=${MINIO_ADDRESS}
+      - MINIO_PORT=${MINIO_PORT}
+      - MINIO_STORAGE_USE_HTTPS=${MINIO_STORAGE_USE_HTTPS}
+      - MINIO_CONSOLE_ADDRESS=${MINIO_CONSOLE_ADDRESS}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    networks:
+      - tools
+  
+  mlflow:
+    container_name: mlflow
+    # image: bitnami/mlflow
+    # restart: unless-stopped
+    build:
+      context: .
+      dockerfile: mlflow.Dockerfile
+    depends_on:
+      - db
+      - minio
+    networks:
+      - tools
+    environment:
+      # - MLFLOW_TRACKING_URI: postgresql://mlflow:mlflowpassword@postgres:5432/mlflow_db
+      - AWS_ACCESS_KEY_ID=${MINIO_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_SECRET_ACCESS_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:${MINIO_PORT}
+      - MLFLOW_S3_IGNORE_TLS=true
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${DB_USER}:${DB_PASS}@db:${DB_PORT}/${DB_DATABASE}
+      --host 0.0.0.0
+      --serve-artifacts
+      --artifacts-destination s3://${MLFLOW_BUCKET_NAME}
+    ports:
+      - "${MLFLOW_PORT}:5000"
+
+volumes:
+  pgdata: {}
+  minio_data: {}
+
+networks:
+  tools:
+    driver: bridge

@@ -1,0 +1,30 @@
+docker run -d --name gitlab-runner --restart always \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v $(pwd)/gitlab-runner-config:/etc/gitlab-runner \
+  gitlab/gitlab-runner:latest
+
+
+
+docker exec -it gitlab-runner gitlab-runner register
+Runtime platform                                    arch=amd64 os=linux pid=24 revision=67b2b2db version=17.10.0
+Running in system-mode.
+
+Enter the GitLab instance URL (for example, https://gitlab.com/):
+https://gitlab.com/
+Enter the registration token:
+GR1348941qQTx-MiTGPZia_xv5Dx6
+Enter a description for the runner:
+[e17b2fdd4984]: windows docker runner
+Enter tags for the runner (comma-separated):
+docker, wsl, windows
+Enter optional maintenance note for the runner:
+my local machine
+WARNING: Support for registration tokens and runner parameters in the 'register' command has been deprecated in GitLab Runner 15.6 and will be replaced with support for authentication tokens. For more information, see https://docs.gitlab.com/ee/ci/runners/new_creation_workflow
+Registering runner... succeeded                     runner=GR1348941qQTx-MiT
+Enter an executor: custom, parallels, virtualbox, docker-windows, instance, shell, ssh, docker, docker+machine, kubernetes, docker-autoscaler:
+docker
+Enter the default Docker image (for example, ruby:2.7):
+python:3.12.3
+Runner registered successfully. Feel free to start it, but if it's running already the config should be automatically reloaded!
+
+Configuration (with the authentication token) was saved in "/etc/gitlab-runner/config.toml"

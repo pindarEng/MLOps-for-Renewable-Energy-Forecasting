@@ -1,0 +1,113 @@
+default:
+  image: python:3.12.3
+  before_script:
+  - pip install -r src/requirements.txt --cache-dir=.cache/pip
+
+cache: 
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+  - .cache/pip
+
+variables:
+  SERVE_IMAGE: $CI_REGISTRY_IMAGE/serve-app:latest
+  SERVE_IMAGE_DOCKERHUB: $DOCKERHUB_USERNAME/wind-app-cicd:latest
+
+stages:
+  - initial
+  - latest_batches
+  - train
+  - getModel
+  - dockerize
+
+
+initial_mode:
+  stage: initial
+  script:
+    - echo "running initial.py"
+    - python src/initial.py
+    - echo "initial.py done!"
+    - echo "starting preprocessing.py"
+    - python src/preprocessing.py
+    - echo "preprocessing.py done!"
+
+download_latest_batches:
+  stage: latest_batches
+  script:
+    - echo "downloading latest batches"
+    - python src/download_latest_batches.py
+  artifacts:
+    paths:
+      - src/temp/
+
+train_mode:
+  stage: train
+  script:
+    - echo "just wait!!! it takes a while!"
+    - echo "started to train linear svr model"
+
+    - python src/trainLinearSVR_lag.py
+    - echo "finished linear svr model"
+    - echo "started to train xgboost model"
+    - python src/trainXGBoost_lag.py
+    - echo "finished xgboost model"
+    - python src/trainRandomForest_lag.py
+    - echo "finished random forest model"
+
+    - python src/trainLinearSVR_nolag.py
+    - echo "finished linear svr model"
+    - python src/trainXGBoost_nolag.py
+    - echo "finished xgboost model"
+    - python src/trainRandomForest_nolag.py
+    - echo "finished random forest model"
+
+
+download_model:
+  stage: getModel
+  script:
+    - echo "Downloading model from MLflow..."
+    # Ensure this script downloads to src/serve_model
+    - python src/download_model.py
+    - echo "Model download script finished."
+    - ls -l src/ # Check if src exists
+  artifacts:
+    paths:
+
+      - src/serve_model_svr_lag
+      - src/serve_model_xgb_lag 
+      - src/serve_model_randomForest_lag
+
+      - src/serve_model_svr_nolag
+      - src/serve_model_xgb_nolag
+      - src/serve_model_randomForest_nolag
+
+    expire_in: 24h
+
+dockerize-app:
+  stage: dockerize
+  image: docker:28.0.4
+  services:
+    - name: docker:28.0.4-dind
+      alias: docker
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    - echo "Logging in to Docker Hub..."
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin docker.io
+    - echo "Docker Hub Login Succeeded."
+  script:
+    - docker build --pull -t $SERVE_IMAGE -t $SERVE_IMAGE_DOCKERHUB -f src/Dockerfile .
+    - echo "Build complete."
+    - docker images # List images to verify build
+
+    - echo "Pushing image to $CI_REGISTRY..."
+    - docker push $SERVE_IMAGE
+    # - docker push $CI_REGISTRY_IMAGE/serve-app:latest
+
+    - echo "Pushing image to Docker Hub ($SERVE_IMAGE_DOCKERHUB)..."
+    - docker push "$SERVE_IMAGE_DOCKERHUB"
+    - echo "Image pushed successfully to Docker Hub."
+
+  needs: 
+    job: latest_batches # Ensures this job runs after download_model
+    job: download_model
+    artifacts: true 
+  
